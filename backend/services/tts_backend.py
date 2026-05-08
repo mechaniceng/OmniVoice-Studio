@@ -911,7 +911,7 @@ class GPTSoVITSBackend(TTSBackend):
         import urllib.request
         url = os.environ.get("OMNIVOICE_GPTSOVITS_URL", "http://127.0.0.1:9880")
         try:
-            req = urllib.request.Request(f"{url}/", method="GET")
+            req = urllib.request.Request(f"{url}/control?command=get_tts_config", method="GET")
             urllib.request.urlopen(req, timeout=2)
             return True, "ready (server reachable)"
         except Exception:
