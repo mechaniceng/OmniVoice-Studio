@@ -1430,18 +1430,43 @@ function App() {
 
   const handleNativeExport = async (e, sourceIdentifier, fallbackName, mode) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
-    try {
-      const { save } = await import('@tauri-apps/plugin-dialog');
-      const ext = fallbackName.includes('.') ? fallbackName.split('.').pop() : 'wav';
-      const destPath = await save({ defaultPath: fallbackName, filters: [{ name: 'Media', extensions: [ext] }] });
-      if (!destPath) return; // User cancelled
+    
+    const isTauri = window.__TAURI_INTERNALS__ !== undefined;
 
-      await exportAction({ source_filename: sourceIdentifier, destination_path: destPath, mode });
-      toast.success(`Exported: ${fallbackName}`);
-      loadExportHistory();
+    if (isTauri) {
+      try {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const ext = fallbackName.includes('.') ? fallbackName.split('.').pop() : 'wav';
+        const destPath = await save({ 
+          defaultPath: fallbackName, 
+          filters: [{ name: 'Media', extensions: [ext] }] 
+        });
+        
+        if (!destPath) return;
+
+        await exportAction({ source_filename: sourceIdentifier, destination_path: destPath, mode });
+        toast.success(`Exportiert nach: ${destPath}`);
+        loadExportHistory();
+        return;
+      } catch (err) {
+        console.warn("Tauri Export fehlgeschlagen, versuche Browser-Download...", err);
+      }
+    }
+
+    try {
+      const downloadUrl = fileToMediaUrl(sourceIdentifier);
+      
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', fallbackName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success(`Download gestartet: ${fallbackName}`);
     } catch (err) {
       console.error(err);
-      toast.error(`Export failed: ${err?.message || err}`);
+      toast.error(`Download fehlgeschlagen: ${err?.message || err}`);
     }
   };
   const revealInFolder = async (filePath) => {
@@ -1464,8 +1489,6 @@ function App() {
     const modeGuess = ['mp4','mov','mkv','webm'].includes(extGuess)
       ? 'video' : ['wav','mp3','flac'].includes(extGuess) ? 'audio' : 'file';
 
-    // In Tauri, WebKit silently drops blob downloads. Use native save dialog
-    // + server-side copy so the file actually lands on disk at a known path.
     if (isTauri) {
       try {
         const { save } = await import('@tauri-apps/plugin-dialog');
