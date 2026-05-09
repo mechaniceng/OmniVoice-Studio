@@ -1445,28 +1445,41 @@ function App() {
         if (!destPath) return;
 
         await exportAction({ source_filename: sourceIdentifier, destination_path: destPath, mode });
-        toast.success(`Exportiert nach: ${destPath}`);
+        toast.success(`Exported to: ${destPath}`);
         loadExportHistory();
         return;
       } catch (err) {
-        console.warn("Tauri Export fehlgeschlagen, versuche Browser-Download...", err);
+        console.warn("Tauri Export failed, trying Browser-Download...", err);
       }
     }
 
+    // FALLBACK: Normal Browser-Download
     try {
-      const downloadUrl = fileToMediaUrl(sourceIdentifier);
+      const API_BASE = import.meta.env.VITE_OMNIVOICE_API || 'http://127.0.0.1:3900/audio';
+
+      let fileUrl = sourceIdentifier;
+      if (!fileUrl.startsWith('http')) {
+        fileUrl = fileUrl.startsWith('/') ? `${API_BASE}${fileUrl}` : `${API_BASE}/${fileUrl}`;
+      }
+
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error(`Server reports an error: ${response.status}`);
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', fallbackName);
+      link.href = blobUrl;
+      link.download = fallbackName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      toast.success(`Download gestartet: ${fallbackName}`);
+      URL.revokeObjectURL(blobUrl);
+      toast.success(`Download successful: ${fallbackName}`);
     } catch (err) {
-      console.error(err);
-      toast.error(`Download fehlgeschlagen: ${err?.message || err}`);
+      console.error("Browser-Download error:", err);
+      toast.error(`Download failed. File not found.`);
     }
   };
   const revealInFolder = async (filePath) => {
