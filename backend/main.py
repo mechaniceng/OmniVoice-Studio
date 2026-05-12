@@ -1,6 +1,14 @@
 import os
 import sys
 
+# Ensure `backend/` is on sys.path so bare imports like `from core.config`
+# work regardless of how uvicorn is invoked:
+#   - `uvicorn main:app`           (cwd = backend/)
+#   - `uvicorn backend.main:app`   (cwd = /app, Docker)
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 try:
     import dotenv
 
@@ -244,7 +252,7 @@ async def lifespan(app: FastAPI):
     async def _preload_capture_asr():
         try:
             from services.model_manager import _gpu_pool, _loading_detail
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             def _warm():
                 from services.asr_backend import get_capture_asr_backend
                 _loading_detail["sub_stage"] = "loading_asr"

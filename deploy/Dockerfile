@@ -24,10 +24,15 @@ WORKDIR /app
 # Enable unbuffered logs and optimizations
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV UV_SYSTEM_PYTHON=1
 ENV HF_HOME=/app/omnivoice_data/huggingface
+# Allow bare imports (from core.config, from services.*, etc.) when
+# uvicorn is started as `backend.main:app` from WORKDIR /app.
+ENV PYTHONPATH=/app/backend
 
 # Install system dependencies (FFmpeg is critical for torchaudio/scene splitting)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     ffmpeg \
     libsndfile1 \
     curl \
