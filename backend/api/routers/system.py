@@ -9,10 +9,12 @@ from api.schemas import SysinfoResponse, SystemInfoResponse, ModelStatusResponse
 from fastapi.responses import FileResponse, StreamingResponse
 import torch
 import shutil
+from pydantic import BaseModel
 
 from core.config import OUTPUTS_DIR, DATA_DIR, CRASH_LOG_PATH, LOG_PATH, IDLE_TIMEOUT_SECONDS
 from services.model_manager import get_model_status, get_best_device
 from services.ffmpeg_utils import find_ffmpeg, run_ffmpeg
+from core import prefs
 
 router = APIRouter()
 logger = logging.getLogger("omnivoice.api")
@@ -548,6 +550,68 @@ async def clean_audio(audio: UploadFile = File(...)):
         return await _do_clean_audio(audio, tmp_dir, clean_id)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+class PreferenceRequest(BaseModel):
+    key: str
+    value: str
+
+
+@router.get("/preferences")
+def get_preferences():
+    """Get all user preferences from backend storage."""
+    return prefs._load()
+
+
+@router.post("/preferences")
+def set_preference(req: PreferenceRequest):
+    """Set a single user preference in backend storage."""
+    prefs.set_(req.key, req.value)
+    return {"key": req.key, "value": req.value}
+
+
+@router.delete("/preferences/{key}")
+def delete_preference(key: str):
+    """Delete a user preference from backend storage."""
+    data = prefs._load()
+    if key in data:
+        del data[key]
+        prefs._save(data)
+        return {"deleted": True, "key": key}
+    return {"deleted": False, "key": key}
+
+
+@router.get("/settings/export")
+def export_settings():
+    """Export all settings (backend preferences + frontend localStorage data)."""
+    from core.config import DB_PATH
+    import json
+    import base64
+    
+    # Backend preferences
+    backend_prefs = prefs._load()
+    
+    # Return combined settings as JSON
+    settings = {
+        "backend": backend_prefs,
+        "version": "1.0",
+        "exported_at": str(uuid.uuid4())
+    }
+    
+    return settings
+
+
+@router.post("/settings/import")
+def import_settings(settings: dict):
+    """Import settings and apply them to backend preferences."""
+    backend_prefs = settings.get("backend", {})
+    
+    # Merge with existing preferences
+    current = prefs._load()
+    current.update(backend_prefs)
+    prefs._save(current)
+    
+    return {"imported": True, "keys_updated": len(backend_prefs)}
 
 
 async def _do_clean_audio(audio, tmp_dir, clean_id):

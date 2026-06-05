@@ -272,6 +272,12 @@ export default function DubTab(props) {
                     videoSrc={dubLocalBlobUrl?.videoUrl}
                     segments={[]}
                     onSegmentsChange={() => { }}
+                    onRegionClick={(segment) => {
+                      // Select the segment when clicked
+                      if (segment && segment.id) {
+                        toggleSegSelect(segment.id);
+                      }
+                    }}
                     disabled={true}
                     overlayContent={
                       dubStep === 'uploading' ? (
@@ -505,6 +511,12 @@ export default function DubTab(props) {
                 videoSrc={videoSrc}
                 segments={dubSegments}
                 onSegmentsChange={setDubSegments}
+                onRegionClick={(segment) => {
+                  // Select the segment when clicked
+                  if (segment && segment.id) {
+                    toggleSegSelect(segment.id);
+                  }
+                }}
                 disabled={dubStep === 'generating' || dubStep === 'stopping'}
                 overlayContent={(dubStep === 'generating' || dubStep === 'stopping') ? (
                   <div className="dub-gen-overlay">

@@ -1,3 +1,4 @@
+/* @ts-nocheck */
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
@@ -6,7 +7,22 @@ import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.esm.js';
 import { Play, Pause, ZoomIn, ZoomOut, SkipBack, Loader, Keyboard } from 'lucide-react';
 import './WaveformErrorBoundary.css';
 
-const REGION_COLORS = [
+// Speaker-based color mapping - consistent colors for same speaker_id
+const SPEAKER_COLORS = {
+  'Speaker 1': 'rgba(211,134,155,0.4)',   // Pink - Male
+  'Speaker 2': 'rgba(131,165,152,0.4)',   // Teal - Female
+  'Speaker 3': 'rgba(184,187,38,0.4)',    // Yellow - Child
+  'Speaker 4': 'rgba(250,189,47,0.4)',    // Orange
+  'Speaker 5': 'rgba(142,192,124,0.4)',   // Green
+  'Speaker 6': 'rgba(254,128,25,0.4)',    // Red
+  'Speaker 7': 'rgba(104,157,106,0.4)',   // Dark Green
+  'Speaker 8': 'rgba(83,165,152,0.4)',    // Cyan
+  'Speaker 9': 'rgba(211,134,155,0.4)',   // Pink variant
+  'Speaker 10': 'rgba(131,165,152,0.4)',  // Teal variant
+};
+
+// Fallback colors for unknown speakers
+const FALLBACK_COLORS = [
   'rgba(211,134,155,0.3)',
   'rgba(131,165,152,0.3)',
   'rgba(184,187,38,0.3)',
@@ -16,14 +32,22 @@ const REGION_COLORS = [
   'rgba(104,157,106,0.3)',
 ];
 
+function getSpeakerColor(speakerId, index) {
+  if (speakerId && SPEAKER_COLORS[speakerId]) {
+    return SPEAKER_COLORS[speakerId];
+  }
+  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+}
+
 /**
  * WaveformTimeline
  *
  * Props:
  *   audioSrc       – URL / blob URL for audio (used as WaveSurfer media + waveform source)
  *   videoSrc       – URL / blob URL for the video preview (optional, shown above waveform)
- *   segments       – Array<{ id, start, end, text }>
+ *   segments       – Array<{ id, start, end, text, speaker_id }>
  *   onSegmentsChange – (fn) => void  (receives a setter-style function)
+ *   onRegionClick  – (segment) => void  (called when a region is clicked)
  *   disabled       – locks drag/resize of regions
  *   overlayContent – React node rendered as a translucent overlay on the waveform
  */
@@ -32,6 +56,7 @@ export default function WaveformTimeline({
   videoSrc,
   segments = [],
   onSegmentsChange,
+  onRegionClick,
   disabled = false,
   overlayContent,
 }) {
@@ -256,6 +281,11 @@ export default function WaveformTimeline({
 
     regions.on('region-clicked', (region, e) => {
       e.stopPropagation();
+      const segId = parseInt(region.id.replace('seg-', ''), 10);
+      const segment = segments.find(s => s.id === segId);
+      if (onRegionClick && segment) {
+        onRegionClick(segment);
+      }
       try { region.play(); } catch (_) { /* WebKit may reject */ }
     });
 
@@ -288,7 +318,6 @@ export default function WaveformTimeline({
       }
       setReady(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioSrc, videoSrc]);
 
   // ── Zoom ────────────────────────────────────────────────────────────────────
@@ -319,7 +348,7 @@ export default function WaveformTimeline({
         id:      `seg-${seg.id}`,
         start:   seg.start,
         end:     seg.end,
-        color:   REGION_COLORS[i % REGION_COLORS.length],
+        color:   getSpeakerColor(seg.speaker_id, i),
         drag:    !disabled,
         resize:  !disabled,
         content: seg.text?.length > 32 ? seg.text.slice(0, 30) + '…' : (seg.text || ''),

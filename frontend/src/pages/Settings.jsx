@@ -29,6 +29,7 @@ const TABS = [
   { id: 'engines',     label: 'Engines',     icon: Plug,         accent: '#d3869b' },
   { id: 'capture',     label: 'Capture',     icon: Keyboard,     accent: '#83a598' },
   { id: 'credentials', label: 'Credentials', icon: KeyRound,     accent: '#fe8019' },
+  { id: 'data',        label: 'Data',        icon: Download,     accent: '#458588' },
   { id: 'logs',        label: 'Logs',        icon: FileText,     accent: '#fabd2f' },
   { id: 'about',       label: 'About',       icon: Info,         accent: '#8ec07c' },
   { id: 'privacy',     label: 'Privacy',     icon: ShieldCheck,  accent: '#b8bb26' },
@@ -1129,6 +1130,8 @@ export default function Settings() {
 
       {activeTab === 'credentials' && <CredentialsTab info={info} />}
 
+      {activeTab === 'data' && <DataTab />}
+
       {activeTab === 'logs' && (
         <section className="settings-section">
           <h2 className="settings-section__head-row">
@@ -1545,6 +1548,110 @@ function CredentialsTab({ info }) {
           </p>
         </div>
       ))}
+    </section>
+  );
+}
+
+function DataTab() {
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('http://localhost:3910/settings/export');
+      const settings = await response.json();
+      
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `omnivoice-settings-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Settings exported successfully');
+    } catch (e) {
+      toast.error(`Export failed: ${e?.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      setImporting(true);
+      try {
+        const text = await file.text();
+        const settings = JSON.parse(text);
+        
+        const response = await fetch('http://localhost:3910/settings/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+        
+        const result = await response.json();
+        toast.success(`Settings imported: ${result.keys_updated} keys updated`);
+      } catch (e) {
+        toast.error(`Import failed: ${e?.message || e}`);
+      } finally {
+        setImporting(false);
+      }
+    };
+    input.click();
+  };
+
+  return (
+    <section className="settings-section">
+      <h2><Download size={16} color="#458588" /> Data Management</h2>
+      <p className="settings-prose">
+        Export your settings to a file for backup or transfer to another device.
+        Import settings from a previously exported file to restore your configuration.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+        <Button
+          size="sm"
+          variant="subtle"
+          onClick={handleExport}
+          loading={exporting}
+          leading={<Download size={12} />}
+        >
+          Export Settings
+        </Button>
+        <Button
+          size="sm"
+          variant="subtle"
+          onClick={handleImport}
+          loading={importing}
+          leading={<Copy size={12} />}
+        >
+          Import Settings
+        </Button>
+      </div>
+
+      <div className="settings-row" style={{ marginTop: 24 }}>
+        <span className="label">Export format</span>
+        <span className="value settings-row__mono">JSON</span>
+      </div>
+      <div className="settings-row">
+        <span className="label">Backend preferences</span>
+        <span className="value">Included</span>
+      </div>
+      <div className="settings-row">
+        <span className="label">Frontend preferences</span>
+        <span className="value">Manual (localStorage)</span>
+      </div>
     </section>
   );
 }

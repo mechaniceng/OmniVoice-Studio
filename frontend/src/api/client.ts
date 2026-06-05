@@ -1,6 +1,6 @@
 // Backend base URL. Configurable via VITE_API_URL or VITE_API_PORT env vars.
 // In production Tauri builds, the webview talks to the sidecar on localhost.
-const viteEnv = import.meta.env ?? {};
+const viteEnv = import.meta.env as Record<string, string> ?? {};
 const _port = viteEnv.VITE_API_PORT || '3900';
 export const API = viteEnv.VITE_API_URL || `http://127.0.0.1:${_port}`;
 

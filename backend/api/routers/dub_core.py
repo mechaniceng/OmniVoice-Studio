@@ -69,6 +69,112 @@ def dub_cleanup_segments(job_id: str):
     return {"segments": cleaned, "before": len(segments), "after": len(cleaned)}
 
 
+@router.post("/dub/update-segment-voice/{job_id}")
+def dub_update_segment_voice(job_id: str, segment_id: str, profile_id: str):
+    """Update a specific segment's voice profile to override auto-assigned speaker clone."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    segments = job.get("segments") or []
+    updated = False
+    for seg in segments:
+        if seg.get("id") == segment_id:
+            seg["profile_id"] = profile_id
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    _save_job(job_id, job)
+    return {"updated": True, "segment_id": segment_id, "profile_id": profile_id}
+
+
+@router.post("/dub/update-all-voices/{job_id}")
+def dub_update_all_voices(job_id: str, profile_id: str):
+    """Update all segments' voice profile to override auto-assigned speaker clones."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    segments = job.get("segments") or []
+    count = 0
+    for seg in segments:
+        seg["profile_id"] = profile_id
+        count += 1
+    _save_job(job_id, job)
+    return {"updated": True, "count": count, "profile_id": profile_id}
+
+
+@router.get("/dub/speakers/{job_id}")
+def get_speakers(job_id: str):
+    """Get all unique speakers with their metadata for a dubbing job."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    segments = job.get("segments") or []
+    
+    # Group segments by speaker_id
+    speakers = {}
+    for seg in segments:
+        speaker_id = seg.get("speaker_id") or "Unknown"
+        if speaker_id not in speakers:
+            speakers[speaker_id] = {
+                "id": speaker_id,
+                "name": speaker_id,  # Default to speaker_id
+                "gender": "unknown",  # Will be detected by AI
+                "age": "unknown",     # Will be detected by AI
+                "segment_count": 0,
+                "total_duration": 0,
+                "segments": []
+            }
+        speakers[speaker_id]["segment_count"] += 1
+        speakers[speaker_id]["total_duration"] += (seg.get("end", 0) - seg.get("start", 0))
+        speakers[speaker_id]["segments"].append(seg["id"])
+    
+    return {"speakers": list(speakers.values())}
+
+
+@router.put("/dub/speakers/{job_id}/{speaker_id}")
+def update_speaker_metadata(job_id: str, speaker_id: str, name: str = None, gender: str = None, age: str = None):
+    """Update speaker metadata (name, gender, age)."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Store speaker metadata in job
+    if "speaker_metadata" not in job:
+        job["speaker_metadata"] = {}
+    
+    if speaker_id not in job["speaker_metadata"]:
+        job["speaker_metadata"][speaker_id] = {}
+    
+    if name is not None:
+        job["speaker_metadata"][speaker_id]["name"] = name
+    if gender is not None:
+        job["speaker_metadata"][speaker_id]["gender"] = gender
+    if age is not None:
+        job["speaker_metadata"][speaker_id]["age"] = age
+    
+    _save_job(job_id, job)
+    return {"updated": True, "speaker_id": speaker_id, "metadata": job["speaker_metadata"][speaker_id]}
+
+
+@router.post("/dub/speakers/{job_id}/merge")
+def merge_speakers(job_id: str, source_speaker_id: str, target_speaker_id: str):
+    """Merge all segments from source speaker into target speaker."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    segments = job.get("segments") or []
+    
+    count = 0
+    for seg in segments:
+        if seg.get("speaker_id") == source_speaker_id:
+            seg["speaker_id"] = target_speaker_id
+            count += 1
+    
+    _save_job(job_id, job)
+    return {"merged": True, "count": count, "from": source_speaker_id, "to": target_speaker_id}
+
+
 @router.post("/dub/abort/{job_id}")
 def dub_abort(job_id: str):
     """Cancel in-flight upload/transcribe subprocesses for a job."""
